@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     solarwinds_password: str = Field("", env="SOLARWINDS_PASSWORD")
     solarwinds_verify_ssl: bool = Field(False, env="SOLARWINDS_VERIFY_SSL")
 
+    nessus_base_url: str = Field("", env="NESSUS_BASE_URL")
+    nessus_access_key: str = Field("", env="NESSUS_ACCESS_KEY")
+    nessus_secret_key: str = Field("", env="NESSUS_SECRET_KEY")
+    nessus_verify_ssl: bool = Field(False, env="NESSUS_VERIFY_SSL")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -10,8 +10,10 @@ def import_all_scans():
     )
 
     scans = client.list_scans()
+    print(f"Found {len(scans)} scans")
 
     for scan in scans:
+        print(f"Processing scan: {scan.get('name')} (ID: {scan.get('id')})")
         scan_id = scan["id"]
         name = scan["name"]
 

@@ -6,6 +6,19 @@ from pydantic import Field
 
 
 class Settings(BaseSettings):
+    # On Prem Inventory
+    # On-prem inventory
+    onprem_account_id: str = Field("onprem", env="ONPREM_ACCOUNT_ID")
+
+    manageengine_base_url: str = Field("", env="MANAGEENGINE_BASE_URL")
+    manageengine_auth_header: str = Field("", env="MANAGEENGINE_AUTH_HEADER")
+    manageengine_verify_ssl: bool = Field(True, env="MANAGEENGINE_VERIFY_SSL")
+
+    solarwinds_base_url: str = Field("", env="SOLARWINDS_BASE_URL")
+    solarwinds_username: str = Field("", env="SOLARWINDS_USERNAME")
+    solarwinds_password: str = Field("", env="SOLARWINDS_PASSWORD")
+    solarwinds_verify_ssl: bool = Field(False, env="SOLARWINDS_VERIFY_SSL")
+
     # Neo4j
     neo4j_uri: str = Field("bolt://localhost:7687", env="NEO4J_URI")
     neo4j_user: str = Field("neo4j", env="NEO4J_USER")

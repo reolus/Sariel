@@ -83,6 +83,17 @@ class Settings(BaseSettings):
     nessus_secret_key: str = Field("", env="NESSUS_SECRET_KEY")
     nessus_verify_ssl: bool = Field(False, env="NESSUS_VERIFY_SSL")
 
+    # DNS
+    dns_hostnames: str = Field("", env="DNS_HOSTNAMES")
+    dns_reverse_cidrs: str = Field("", env="DNS_REVERSE_CIDRS")
+
+    # Active Directory
+    ad_server_uri: str = Field("", env="AD_SERVER_URI")
+    ad_bind_user: str = Field("", env="AD_BIND_USER")
+    ad_bind_password: str = Field("", env="AD_BIND_PASSWORD")
+    ad_base_dn: str = Field("", env="AD_BASE_DN")
+    ad_use_ssl: bool = Field(True, env="AD_USE_SSL")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

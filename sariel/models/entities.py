@@ -49,6 +49,8 @@ class EdgeType(str, Enum):
     FEDERATED_TRUST = "FEDERATED_TRUST"
     CONDITIONAL_ACCESS = "CONDITIONAL_ACCESS"
     BELONGS_TO = "BELONGS_TO"
+    CAN_REACH = "CAN_REACH"
+    IN_SUBNET = "IN_SUBNET"
 
 
 class Sensitivity(str, Enum):

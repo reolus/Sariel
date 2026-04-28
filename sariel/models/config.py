@@ -94,6 +94,12 @@ class Settings(BaseSettings):
     ad_base_dn: str = Field("", env="AD_BASE_DN")
     ad_use_ssl: bool = Field(True, env="AD_USE_SSL")
 
+    # Fortinet / FortiGate
+    fortinet_base_url: str = Field("", env="FORTINET_BASE_URL")
+    fortinet_api_token: str = Field("", env="FORTINET_API_TOKEN")
+    fortinet_vdom: str = Field("root", env="FORTINET_VDOM")
+    fortinet_verify_ssl: bool = Field(False, env="FORTINET_VERIFY_SSL")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

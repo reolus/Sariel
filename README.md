@@ -1,117 +1,89 @@
-# Sariel — Cloud Attack Path Detection
+# Sariel
 
-Context-aware security platform that ingests AWS + Azure/Entra data, builds a
-unified graph, detects real-world attack paths, and prioritizes the handful of
-risks that actually matter.
+**Sariel is a proactive cybersecurity attack-path platform that models, predicts, and explains how adversaries move through your environment—before they do.**
 
-## Quick Start
+---
 
-```bash
-# 1. Start infrastructure
-cp .env.example .env
-# Edit .env with your credentials
-docker-compose up neo4j postgres redis -d
+## High-Level Architecture
 
-# 2. Install dependencies
-pip install -e ".[azure,llm]"
-
-# 3. Initialize databases
-python scripts/init_db.py
-
-# 4. Start API
-uvicorn sariel.api.main:app --reload
-
-# 5. Start scheduler (separate terminal)
-python -m sariel.scheduler.jobs
+```mermaid
+flowchart LR
+    A[Data Sources] --> B[Ingestion Layer]
+    B --> C[Normalization Engine]
+    C --> D[Neo4j Graph]
+    D --> E[Context Builder]
+    E --> F[AI Attack Mapper]
+    F --> G[Validation Layer]
+    G --> H[Suggested Edges]
+    H --> I[Analyst Review]
+    I --> J[Confirmed Attack Paths]
 ```
 
-## Run everything with Docker
+---
 
-```bash
-docker-compose up
+## Attack Path Flow
+
+```mermaid
+flowchart LR
+    A[Compromise Initial Host] --> B[Exploit or Access]
+    B --> C[Credential Discovery]
+    C --> D[Lateral Movement]
+    D --> E[Privilege Escalation]
+    E --> F[Target System]
 ```
 
-API will be available at http://localhost:8000
-Docs at http://localhost:8000/docs
-Neo4j browser at http://localhost:7474
+---
 
-## Key Endpoints
+## Graph Model
 
-| Endpoint | Description |
-|---|---|
-| `GET /risks?min_score=50` | Ranked attack paths |
-| `GET /risks?severity=CRITICAL&cloud=aws` | Filtered by severity + cloud |
-| `GET /paths/{id}` | Full path detail with nodes, edges, fixes |
-| `GET /paths/{id}?with_explanation=true` | With LLM explanation |
-| `GET /assets?node_type=EC2Instance&has_public_ip=true` | Asset inventory |
-| `GET /assets/search?q=prod` | Asset search |
-| `GET /admin/health` | Health check |
-| `POST /admin/scan/trigger` | Trigger path analysis |
-
-## Architecture
-
-```
-AWS connectors ─┐
-                ├─► Task Queue ─► Normalization ─► Neo4j Graph ─► Attack Path Engine ─► Postgres
-Azure connectors┘                                                       ↑
-Entra connector ──────────────────────────────────────────────── Scoring Engine
-                                                                        ↓
-                                                               FastAPI ─► REST API
+```mermaid
+graph TD
+    A[Asset] -->|HAS_VULN| V[Vulnerability]
+    A -->|EXPOSES_SERVICE| S[Service]
+    A -->|MEMBER_OF| I[Identity]
+    A -->|RUNS_SERVICE| S
+    A -->|SUGGESTS_LATERAL_MOVE| B[Asset]
 ```
 
-## Attack Path Patterns
+---
 
-| Pattern | Description |
-|---|---|
-| `public_vuln_data_access` | Internet-reachable compute + exploitable CVE → sensitive data |
-| `identity_abuse` | No-MFA user → over-permissioned role → sensitive data |
-| `overpermissioned_role` | Public compute with wildcard role → sensitive data |
-| `entra_group_escalation` | Role-assignable Entra group → privileged RBAC role |
-| `cross_cloud_federation` | Azure Managed Identity federated to AWS IAM → sensitive data |
+## AI Mapping Pipeline
 
-## Risk Score Formula
-
-```
-RiskScore = 100 × E × X × P × S
-
-E = Exposure        (public=1.0, internal=0.4, isolated=0.1)
-X = Exploitability  (CVSS exploitScore/3.9, or pattern baseline)
-P = Privilege gain  (admin=1.0, write=0.7, read=0.4)
-S = Sensitivity     (critical=1.0, high=0.7, medium=0.4, public=0.05)
+```mermaid
+flowchart LR
+    A[Neo4j Graph] --> B[Context Builder]
+    B --> C[LLM Reasoning]
+    C --> D[Structured JSON]
+    D --> E[Validator]
+    E --> F[SUGGESTS_* Edges]
 ```
 
-Scores ≥ 70 = CRITICAL. Scores ≥ 40 = HIGH. Scores < 10 = suppressed.
+---
 
-## Running Tests
+## Confidence Model
 
-```bash
-pip install -e ".[dev]"
-pytest tests/ -v
+```mermaid
+flowchart TD
+    A[AI Confidence] --> D[Final Score]
+    B[Graph Evidence] --> D
+    C[Exploitability Data] --> D
+    E[Environment Signals] --> D
 ```
 
-## AWS IAM Policy (minimum required)
+---
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "ec2:DescribeInstances", "ec2:DescribeSecurityGroups",
-        "iam:ListUsers", "iam:ListRoles", "iam:ListAttachedRolePolicies",
-        "iam:ListRolePolicies", "iam:GetRolePolicy", "iam:ListMFADevices",
-        "s3:ListAllMyBuckets", "s3:GetBucketTagging", "s3:GetPublicAccessBlock",
-        "secretsmanager:ListSecrets",
-        "inspector2:ListFindings"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
+## Example Attack Path
+
+```mermaid
+flowchart LR
+    G[Genetec-06] --> S[SMB Exposure]
+    S --> T[CH-TYLER-SQL-01]
+    T --> L[Log4j Vulnerability]
+    L --> GIS[GIS-GEO-ARC-01]
 ```
 
-## Azure Permissions
+---
 
-- ARM service principal: **Reader** at subscription scope
-- Entra app registration: `Directory.Read.All`, `RoleManagement.Read.All`, `Policy.Read.All`
+## Vision
+
+Security teams should know the attacker’s path **before the attacker takes it.**

@@ -1,13 +1,20 @@
 """Sariel runtime configuration via environment variables."""
 from __future__ import annotations
 from functools import lru_cache
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
 
 class Settings(BaseSettings):
     # On Prem Inventory
     # On-prem inventory
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
     onprem_account_id: str = Field("onprem", env="ONPREM_ACCOUNT_ID")
 
     manageengine_base_url: str = Field("", env="MANAGEENGINE_BASE_URL")
@@ -100,9 +107,9 @@ class Settings(BaseSettings):
     fortinet_vdom: str = Field("root", env="FORTINET_VDOM")
     fortinet_verify_ssl: bool = Field(False, env="FORTINET_VERIFY_SSL")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    #class Config:
+    #    env_file = ".env"
+    #    env_file_encoding = "utf-8"
 
 
 @lru_cache()

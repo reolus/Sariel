@@ -64,6 +64,11 @@ dev = [
     "mypy>=1.9",
     "moto[ec2,iam,s3,secretsmanager,inspector2]>=5.0",
 ]
+ai = [
+  "openai>=1.0.0",
+  "pydantic>=2.0.0",
+  "neo4j>=5.0.0",
+]
 
 [project.scripts]
 sariel-api    = "sariel.api.main:app"

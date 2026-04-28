@@ -22,17 +22,14 @@ logger = logging.getLogger(__name__)
 
 class NessusConnector(BaseConnector):
     """
-    Ingest vulnerabilities from a Nessus .nessus XML export.
+    Ingest Nessus .nessus XML exports.
 
-    This connector ingests BOTH:
-    - CVE-backed findings
-    - plugin-only Nessus findings
-
-    Graph model:
-      Asset -> HAS_VULN -> plugin://nessus/{plugin_id}
-      Asset -> HAS_VULN -> cve://CVE-XXXX-YYYY
-
-    This preserves Nessus plugin signal while still allowing CVE correlation.
+    This version:
+    - ingests CVE-backed findings
+    - ingests plugin-only findings
+    - deduplicates vulnerability nodes and edges
+    - creates placeholder assets for unresolved Nessus hosts
+    - keeps CVE correlation intact
     """
 
     def __init__(
@@ -43,6 +40,7 @@ class NessusConnector(BaseConnector):
         cloud: Cloud = Cloud.AWS,
         source_name: str = "nessus",
         include_info: bool = False,
+        create_placeholder_assets: bool = True,
     ):
         self.nessus_file = str(nessus_file)
         self.asset_resolver = asset_resolver
@@ -50,6 +48,7 @@ class NessusConnector(BaseConnector):
         self.cloud = cloud
         self.source_name = source_name
         self.include_info = include_info
+        self.create_placeholder_assets = create_placeholder_assets
 
     def authenticate(self) -> None:
         path = Path(self.nessus_file)
@@ -68,59 +67,78 @@ class NessusConnector(BaseConnector):
         root = ET.parse(raw["nessus_file"]).getroot()
 
         seen_nodes: set[str] = set()
-        seen_edges: set[tuple[str, str, str]] = set()
+        seen_edges: set[tuple[str, str, str, str]] = set()
 
         for report_host in root.findall(".//ReportHost"):
             host_context = self._extract_host_context(report_host)
 
-            for report_item in report_host.findall("./ReportItem"):
+            for item in report_host.findall("./ReportItem"):
                 try:
-                    finding = self._extract_finding(report_item, host_context)
+                    finding = self._extract_finding(item, host_context)
 
                     if finding["severity"] == "INFO" and not self.include_info:
                         continue
 
                     asset_id = self.asset_resolver(finding)
+
                     if not asset_id:
-                        errors.append(
-                            f"Unresolved asset for host={finding.get('hostname') or finding.get('host_ip')}"
-                        )
-                        continue
+                        if not self.create_placeholder_assets:
+                            errors.append(
+                                f"Unresolved asset for host={finding.get('hostname') or finding.get('host_ip')}"
+                            )
+                            continue
+
+                        placeholder = self._build_placeholder_asset(finding, now)
+                        asset_id = placeholder.canonical_id
+
+                        if placeholder.canonical_id not in seen_nodes:
+                            seen_nodes.add(placeholder.canonical_id)
+                            nodes.append(placeholder)
 
                     vuln_nodes = self._build_vulnerability_nodes(finding, now)
 
-                    for vuln_node in vuln_nodes:
-                        if vuln_node.canonical_id not in seen_nodes:
-                            seen_nodes.add(vuln_node.canonical_id)
-                            nodes.append(vuln_node)
+                    for vuln in vuln_nodes:
+                        if vuln.canonical_id not in seen_nodes:
+                            seen_nodes.add(vuln.canonical_id)
+                            nodes.append(vuln)
 
-                        edge_key = (asset_id, vuln_node.canonical_id, finding["plugin_id"])
-                        if edge_key not in seen_edges:
-                            seen_edges.add(edge_key)
-                            edges.append(
-                                CanonicalEdge(
-                                    from_id=asset_id,
-                                    to_id=vuln_node.canonical_id,
-                                    edge_type=EdgeType.HAS_VULN,
-                                    properties={
-                                        "source": self.source_name,
-                                        "scanner": "nessus",
-                                        "plugin_id": finding["plugin_id"],
-                                        "plugin_name": finding["plugin_name"],
-                                        "plugin_family": finding["plugin_family"],
-                                        "severity": finding["severity"],
-                                        "port": finding["port"],
-                                        "protocol": finding["protocol"],
-                                        "service": finding["service"],
-                                        "hostname": finding["hostname"],
-                                        "host_ip": finding["host_ip"],
-                                    },
-                                    scanned_at=now,
-                                )
+                        edge_key = (
+                            asset_id,
+                            vuln.canonical_id,
+                            finding["plugin_id"],
+                            str(finding["port"]),
+                        )
+
+                        if edge_key in seen_edges:
+                            continue
+
+                        seen_edges.add(edge_key)
+
+                        edges.append(
+                            CanonicalEdge(
+                                from_id=asset_id,
+                                to_id=vuln.canonical_id,
+                                edge_type=EdgeType.HAS_VULN,
+                                properties={
+                                    "source": self.source_name,
+                                    "scanner": "nessus",
+                                    "plugin_id": finding["plugin_id"],
+                                    "plugin_name": finding["plugin_name"],
+                                    "plugin_family": finding["plugin_family"],
+                                    "severity": finding["severity"],
+                                    "port": finding["port"],
+                                    "protocol": finding["protocol"],
+                                    "service": finding["service"],
+                                    "hostname": finding["hostname"],
+                                    "host_ip": finding["host_ip"],
+                                    "cves": finding["cves"],
+                                },
+                                scanned_at=now,
                             )
+                        )
 
                 except Exception as exc:
-                    plugin_id = report_item.attrib.get("pluginID", "unknown")
+                    plugin_id = item.attrib.get("pluginID", "unknown")
                     errors.append(f"Failed to process Nessus finding plugin={plugin_id}: {exc}")
 
         return NormalizedSnapshot(
@@ -131,6 +149,36 @@ class NessusConnector(BaseConnector):
             raw_source=self.nessus_file,
             scanned_at=now,
             errors=errors,
+        )
+
+    def _build_placeholder_asset(self, finding: dict, now: datetime) -> CanonicalNode:
+        host_ip = finding.get("host_ip", "")
+        hostname = finding.get("hostname", "") or finding.get("fqdn", "") or host_ip
+        stable_key = host_ip or hostname
+
+        canonical_id = f"nessus://{self.account_id}/asset/{stable_key}"
+
+        return CanonicalNode(
+            canonical_id=canonical_id,
+            node_type=NodeType.EC2_INSTANCE,  # temporary on-prem compute representation
+            cloud=self.cloud,
+            account_id=self.account_id,
+            label=hostname or host_ip or canonical_id,
+            properties={
+                "source": "nessus",
+                "scanner": "nessus",
+                "discovered_by": "nessus",
+                "is_placeholder": True,
+                "hostname": hostname,
+                "fqdn": finding.get("fqdn", ""),
+                "private_ip": host_ip,
+                "public_ip": "",
+                "os": finding.get("operating_system", ""),
+                "device_type": "unknown",
+                "has_public_ip": False,
+                "managed": False,
+            },
+            scanned_at=now,
         )
 
     def _build_vulnerability_nodes(self, finding: dict, now: datetime) -> list[CanonicalNode]:
@@ -195,7 +243,7 @@ class NessusConnector(BaseConnector):
         return nodes
 
     def _extract_host_context(self, report_host: ET.Element) -> dict:
-        host_context = {
+        ctx = {
             "report_name": report_host.attrib.get("name", ""),
             "host_ip": "",
             "hostname": "",
@@ -209,25 +257,20 @@ class NessusConnector(BaseConnector):
             value = (tag.text or "").strip()
 
             if name == "host-ip":
-                host_context["host_ip"] = value
+                ctx["host_ip"] = value
             elif name == "host-fqdn":
-                host_context["fqdn"] = value
+                ctx["fqdn"] = value
             elif name == "hostname":
-                host_context["hostname"] = value
+                ctx["hostname"] = value
             elif name == "netbios-name":
-                host_context["netbios"] = value
+                ctx["netbios"] = value
             elif name == "operating-system":
-                host_context["operating_system"] = value
+                ctx["operating_system"] = value
 
-        if not host_context["hostname"]:
-            host_context["hostname"] = (
-                host_context["fqdn"]
-                or host_context["netbios"]
-                or host_context["report_name"]
-                or host_context["host_ip"]
-            )
+        if not ctx["hostname"]:
+            ctx["hostname"] = ctx["fqdn"] or ctx["netbios"] or ctx["report_name"] or ctx["host_ip"]
 
-        return host_context
+        return ctx
 
     def _extract_finding(self, item: ET.Element, host_context: dict) -> dict:
         def text(name: str) -> str:
@@ -237,11 +280,12 @@ class NessusConnector(BaseConnector):
         def first_float(*names: str, default: float = 0.0) -> float:
             for name in names:
                 value = text(name)
-                if value:
-                    try:
-                        return float(value)
-                    except ValueError:
-                        pass
+                if not value:
+                    continue
+                try:
+                    return float(value)
+                except ValueError:
+                    continue
             return default
 
         plugin_id = item.attrib.get("pluginID", "")
@@ -261,7 +305,6 @@ class NessusConnector(BaseConnector):
 
         cvss_score = first_float("cvss3_base_score", "cvss_base_score", default=0.0)
 
-        # If Nessus did not provide CVSS, infer from severity so scoring still works.
         if cvss_score <= 0:
             cvss_score = {
                 "CRITICAL": 9.5,
@@ -294,20 +337,8 @@ class NessusConnector(BaseConnector):
 
         has_exploit = any(
             token in exploit_blob
-            for token in [
-                "true",
-                "yes",
-                "metasploit",
-                "exploit",
-                "exploitdb",
-                "edb",
-                "canvas",
-                "core",
-            ]
+            for token in ["true", "yes", "metasploit", "exploitdb", "edb", "canvas", "core"]
         )
-
-        vpr_score = first_float("vpr_score", default=0.0)
-        epss_score = first_float("epss_score", default=0.0)
 
         return {
             "hostname": host_context.get("hostname", ""),
@@ -325,8 +356,8 @@ class NessusConnector(BaseConnector):
             "cves": cves,
             "cvss_score": cvss_score,
             "cvss_exploitability_score": cvss_exploitability_score,
-            "vpr_score": vpr_score,
-            "epss_score": epss_score,
+            "vpr_score": first_float("vpr_score", default=0.0),
+            "epss_score": first_float("epss_score", default=0.0),
             "has_exploit": has_exploit,
             "synopsis": text("synopsis"),
             "description": text("description"),

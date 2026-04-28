@@ -42,6 +42,7 @@ class FortinetReachabilityConnector(BaseConnector):
         base_url: str,
         api_token: str,
         account_id: str = "fortinet",
+        device_name: str = "fortigate",
         vdom: str = "root",
         verify_ssl: bool = False,
         timeout: int = 30,
@@ -49,6 +50,7 @@ class FortinetReachabilityConnector(BaseConnector):
         self.base_url = base_url.rstrip("/")
         self.api_token = api_token
         self.account_id = account_id
+        self.device_name = device_name
         self.vdom = vdom
         self.verify_ssl = verify_ssl
         self.timeout = timeout
@@ -138,6 +140,8 @@ class FortinetReachabilityConnector(BaseConnector):
                 for src in src_networks:
                     src_node = make_network_node(
                         account_id=self.account_id,
+                        device_name=self.device_name,
+                        vdom=self.vdom,
                         name=src["name"],
                         cidr=src["cidr"],
                         role="source",
@@ -148,6 +152,8 @@ class FortinetReachabilityConnector(BaseConnector):
                     for dst in dst_networks:
                         dst_node = make_network_node(
                             account_id=self.account_id,
+                            device_name=self.device_name,
+                            vdom=self.vdom,
                             name=dst["name"],
                             cidr=dst["cidr"],
                             role="destination",
@@ -176,6 +182,8 @@ class FortinetReachabilityConnector(BaseConnector):
                                     edge_type=EdgeType.CAN_REACH,
                                     properties={
                                         "source": "fortinet",
+                                        "firewall_name": self.device_name,
+                                        "firewall_base_url": self.base_url,
                                         "firewall": self.base_url,
                                         "vdom": self.vdom,
                                         "policy_id": policy_id,
@@ -432,22 +440,34 @@ def expand_service_names(names_: list[str], service_index: dict[str, list[dict]]
 
 def make_network_node(
     account_id: str,
+    device_name: str,
+    vdom: str,
     name: str,
     cidr: str,
     role: str,
     now: datetime,
 ) -> CanonicalNode:
-    safe = safe_id(f"{name}-{cidr}")
-    canonical_id = f"fortinet://{account_id}/network/{safe}"
+    safe_device = safe_id(device_name)
+    safe_vdom = safe_id(vdom)
+    safe_network = safe_id(f"{name}-{cidr}")
+
+    canonical_id = (
+        f"fortinet://{account_id}/"
+        f"{safe_device}/"
+        f"vdom/{safe_vdom}/"
+        f"network/{safe_network}"
+    )
 
     return CanonicalNode(
         canonical_id=canonical_id,
-        node_type=NodeType.SECURITY_GROUP,  # temporary until you add Subnet/NetworkSegment
+        node_type=NodeType.SECURITY_GROUP,
         cloud=Cloud.AWS,
         account_id=account_id,
-        label=name,
+        label=f"{device_name}:{name}",
         properties={
             "source": "fortinet",
+            "firewall_name": device_name,
+            "vdom": vdom,
             "network_name": name,
             "cidr": cidr,
             "network_role": role,

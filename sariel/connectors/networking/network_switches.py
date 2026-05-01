@@ -160,7 +160,7 @@ def collect_running_config(target: SwitchTarget) -> str:
         "port": target.port,
         "use_keys": False,
         "allow_agent": False,
-        "look_for_keys": False,
+        #"look_for_keys": False,
         "timeout": 60,
         "conn_timeout": 30,
         "banner_timeout": 30,

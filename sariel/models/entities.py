@@ -9,11 +9,15 @@ from datetime import datetime
 class Cloud(str, Enum):
     AWS = "aws"
     AZURE = "azure"
+    ONPREM = "onprem"
+    ONPREM = "onprem"
 
 
 class NodeType(str, Enum):
     EC2_INSTANCE = "EC2Instance"
     AZURE_VM = "AzureVM"
+    ONPREM_HOST = "OnPremHost"          # physical/virtual server not in cloud
+    NETWORK_SEGMENT = "NetworkSegment"  # subnet / firewall zone
     SECURITY_GROUP = "SecurityGroup"
     AZURE_NSG = "AzureNSG"
     INTERNET = "Internet"
@@ -51,6 +55,7 @@ class EdgeType(str, Enum):
     BELONGS_TO = "BELONGS_TO"
     CAN_REACH = "CAN_REACH"
     IN_SUBNET = "IN_SUBNET"
+    RUNS_SERVICE = "RUNS_SERVICE"
 
 
 class Sensitivity(str, Enum):
@@ -72,6 +77,8 @@ class Exposure(str, Enum):
 BASE_LABELS: dict[NodeType, list[str]] = {
     NodeType.EC2_INSTANCE: ["ComputeAsset"],
     NodeType.AZURE_VM: ["ComputeAsset"],
+    NodeType.ONPREM_HOST: ["ComputeAsset"],
+    NodeType.NETWORK_SEGMENT: ["NetworkControl"],
     NodeType.SECURITY_GROUP: ["NetworkControl"],
     NodeType.AZURE_NSG: ["NetworkControl"],
     NodeType.IAM_USER: ["IdentityPrincipal"],

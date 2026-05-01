@@ -1,0 +1,20 @@
+# Sariel switch inventory.
+# vendor is a Netmiko device_type. Common values:
+#   cisco_ios, cisco_nxos, aruba_os, aruba_osswitch, hp_procurve
+switches:
+  - name: core-sw-01
+    host: 10.10.0.10
+    vendor: cisco_ios
+    username: sariel-ro
+    password: change-me
+    secret: change-me-enable-secret
+    port: 22
+    timeout: 30
+
+  - name: edge-aruba-01
+    host: 10.10.0.20
+    vendor: aruba_osswitch
+    username: sariel-ro
+    password: change-me
+    port: 22
+    timeout: 30

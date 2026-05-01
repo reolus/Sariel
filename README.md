@@ -110,6 +110,35 @@ It proposes **reviewable candidate paths**.
 
 ---
 
+## Aruba/Cisco switch ingestion
+
+Sariel includes a network switch ingestion path for validating whether an attack path has real network reachability behind it. The connector supports Cisco IOS/NX-OS-style configs and ArubaOS/ProCurve-style configs through Netmiko collection or offline saved config files.
+
+Install the optional live collection dependency:
+
+```bash
+pip install -e ".[network]"
+```
+
+Run an offline lab ingest:
+
+```bash
+python -m sariel.ingest.network_switches \
+  --inventory examples/network_switches/switches.yaml \
+  --offline-config-dir examples/network_switches
+```
+
+Run live collection:
+
+```bash
+python -m sariel.ingest.network_switches \
+  --inventory examples/network_switches/switches.yaml
+```
+
+The switch ingestion writes `Switch`, `SwitchInterface`, `Vlan`, `Subnet`, and `Route` nodes, then derives `CAN_REACH` relationships from connected routed interfaces, SVIs, static routes, and permit ACL entries. Deny ACLs are stored as `ACL_RULE` evidence so Sariel can show why a path may be blocked instead of pretending every subnet is magically best friends with every other subnet.
+
+See `examples/network_switches/README.md` for inventory and test config examples.
+
 ## AI Architecture
 
 Neo4j Graph  

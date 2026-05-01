@@ -25,7 +25,6 @@ Usage:
 """
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -144,8 +143,8 @@ class PortEnricher:
 
                 updates.append({
                     "asset_id": asset_id,
-                    "open_ports": json.dumps(sorted_ports),
-                    "services": json.dumps(sorted_services),
+                    "open_ports": sorted_ports,
+                    "services": sorted_services,
                     "normalized_os": normalized_os,
                     "updated_at": now,
                 })

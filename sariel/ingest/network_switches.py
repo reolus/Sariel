@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from sariel.connectors.network_switches import (
+from sariel.connectors.networking.network_switches import (
     SwitchTarget,
     collect_running_config,
     parse_switch_config,

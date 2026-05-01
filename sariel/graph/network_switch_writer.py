@@ -9,7 +9,7 @@ from typing import Any
 
 from neo4j import GraphDatabase, Driver
 
-from sariel.connectors.network_switches import (
+from sariel.connectors.networking.network_switches import (
     AclRuleFact,
     InterfaceFact,
     RouteFact,

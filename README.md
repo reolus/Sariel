@@ -1,117 +1,373 @@
-# Sariel — Cloud Attack Path Detection
+# Sariel
 
-Context-aware security platform that ingests AWS + Azure/Entra data, builds a
-unified graph, detects real-world attack paths, and prioritizes the handful of
-risks that actually matter.
+**Sariel is a proactive cybersecurity attack-path platform that models, predicts, and explains how adversaries move through your environment—before they do.**
 
-## Quick Start
+Traditional security is reactive.  
+Sariel is designed to answer:
 
-```bash
-# 1. Start infrastructure
-cp .env.example .env
-# Edit .env with your credentials
-docker-compose up neo4j postgres redis -d
+> *“If an attacker compromises this system, what can they actually do next?”*
 
-# 2. Install dependencies
-pip install -e ".[azure,llm]"
+---
 
-# 3. Initialize databases
-python scripts/init_db.py
+## Why Sariel Exists
 
-# 4. Start API
-uvicorn sariel.api.main:app --reload
+Cybersecurity has historically followed a reactive model:
 
-# 5. Start scheduler (separate terminal)
-python -m sariel.scheduler.jobs
-```
+Exploit happens → Patch deployed  
+New technique → New detection  
+Repeat  
 
-## Run everything with Docker
+Sariel flips that model:
 
-```bash
-docker-compose up
-```
+Map the environment  
+→ Understand attacker capabilities  
+→ Predict realistic attack paths  
+→ Fix what actually matters  
 
-API will be available at http://localhost:8000
-Docs at http://localhost:8000/docs
-Neo4j browser at http://localhost:7474
+This is not vulnerability management.  
+This is **adversary path analysis**.
 
-## Key Endpoints
+---
 
-| Endpoint | Description |
-|---|---|
-| `GET /risks?min_score=50` | Ranked attack paths |
-| `GET /risks?severity=CRITICAL&cloud=aws` | Filtered by severity + cloud |
-| `GET /paths/{id}` | Full path detail with nodes, edges, fixes |
-| `GET /paths/{id}?with_explanation=true` | With LLM explanation |
-| `GET /assets?node_type=EC2Instance&has_public_ip=true` | Asset inventory |
-| `GET /assets/search?q=prod` | Asset search |
-| `GET /admin/health` | Health check |
-| `POST /admin/scan/trigger` | Trigger path analysis |
+## Core Concept
 
-## Architecture
+Sariel builds a graph of your environment using:
 
-```
-AWS connectors ─┐
-                ├─► Task Queue ─► Normalization ─► Neo4j Graph ─► Attack Path Engine ─► Postgres
-Azure connectors┘                                                       ↑
-Entra connector ──────────────────────────────────────────────── Scoring Engine
-                                                                        ↓
-                                                               FastAPI ─► REST API
-```
+- Vulnerability data (Nessus, etc.)
+- Infrastructure (SolarWinds, inventory)
+- Identity (Active Directory)
+- Services, ports, and relationships
 
-## Attack Path Patterns
+Then models:
 
-| Pattern | Description |
-|---|---|
-| `public_vuln_data_access` | Internet-reachable compute + exploitable CVE → sensitive data |
-| `identity_abuse` | No-MFA user → over-permissioned role → sensitive data |
-| `overpermissioned_role` | Public compute with wildcard role → sensitive data |
-| `entra_group_escalation` | Role-assignable Entra group → privileged RBAC role |
-| `cross_cloud_federation` | Azure Managed Identity federated to AWS IAM → sensitive data |
+Asset → Exposure → Capability → Movement → Target
 
-## Risk Score Formula
+---
 
-```
-RiskScore = 100 × E × X × P × S
+## How It Works
 
-E = Exposure        (public=1.0, internal=0.4, isolated=0.1)
-X = Exploitability  (CVSS exploitScore/3.9, or pattern baseline)
-P = Privilege gain  (admin=1.0, write=0.7, read=0.4)
-S = Sensitivity     (critical=1.0, high=0.7, medium=0.4, public=0.05)
-```
+### 1. Data Ingestion
 
-Scores ≥ 70 = CRITICAL. Scores ≥ 40 = HIGH. Scores < 10 = suppressed.
+Sariel ingests and normalizes data from:
 
-## Running Tests
+- Vulnerability scanners  
+- Asset inventory  
+- Network monitoring  
+- Identity systems (AD)  
 
-```bash
-pip install -e ".[dev]"
-pytest tests/ -v
-```
+---
 
-## AWS IAM Policy (minimum required)
+### 2. Graph Modeling (Neo4j)
+
+Everything is represented as a graph:
+
+(:Asset)  
+(:Vulnerability)  
+(:Service)  
+(:Identity)  
+
+Relationships:
+
+HAS_VULN  
+EXPOSES_SERVICE  
+MEMBER_OF  
+RUNS_SERVICE  
+
+---
+
+### 3. Attack Path Engine
+
+Sariel evaluates paths like:
+
+Compromised Host  
+→ Exploitable Service  
+→ Credential Access  
+→ Lateral Movement  
+→ Target System  
+
+Sariel distinguishes:
+
+- Vulnerability overlap (weak signal)  
+- Reachability (network reality)  
+- Credential-based movement (high confidence)  
+- Privilege escalation paths (critical)  
+
+---
+
+### 4. AI Attack Mapping Engine
+
+Sariel includes an AI-driven mapping layer that:
+
+Analyzes graph context  
+→ Proposes attack vectors  
+→ Scores confidence  
+→ Explains reasoning  
+→ Identifies missing evidence  
+
+**Important:**  
+AI does NOT create trusted attack paths.  
+It proposes **reviewable candidate paths**.
+
+---
+
+## AI Architecture
+
+Neo4j Graph  
+→ Context Builder (Cypher → JSON)  
+→ AI Reasoning Model  
+→ Structured Output (JSON)  
+→ Validation Layer  
+→ Graph (SUGGESTS_* edges)  
+
+---
+
+### AI Output Example
 
 ```json
 {
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "ec2:DescribeInstances", "ec2:DescribeSecurityGroups",
-        "iam:ListUsers", "iam:ListRoles", "iam:ListAttachedRolePolicies",
-        "iam:ListRolePolicies", "iam:GetRolePolicy", "iam:ListMFADevices",
-        "s3:ListAllMyBuckets", "s3:GetBucketTagging", "s3:GetPublicAccessBlock",
-        "secretsmanager:ListSecrets",
-        "inspector2:ListFindings"
-      ],
-      "Resource": "*"
-    }
+  "source_asset": "Genetec-06",
+  "target_asset": "CH-TYLER-SQL-01",
+  "suggested_relationship": "SUGGESTS_LATERAL_MOVE",
+  "confidence": 0.68,
+  "attack_method": "SMB exposure with shared Windows vulnerability",
+  "evidence": [
+    "Both systems expose SMB",
+    "Both have critical Windows vulnerabilities"
+  ],
+  "missing_evidence": [
+    "No credential data",
+    "No network flow confirmation"
   ]
 }
 ```
 
-## Azure Permissions
+---
 
-- ARM service principal: **Reader** at subscription scope
-- Entra app registration: `Directory.Read.All`, `RoleManagement.Read.All`, `Policy.Read.All`
+### Graph Separation Model
+
+Observed Facts:
+HAS_VULN  
+EXPOSES_SERVICE  
+MEMBER_OF  
+
+AI Suggestions:
+SUGGESTS_LATERAL_MOVE  
+SUGGESTS_CAN_REACH  
+SUGGESTS_PRIV_ESC  
+
+Confirmed Attack Paths:
+CAN_REACH  
+CAN_AUTH_TO  
+ADMIN_TO  
+
+---
+
+## What Makes Sariel Different
+
+### Proactive Security
+
+Not “what is vulnerable?”  
+But: what can an attacker actually do with this?
+
+---
+
+### Path-Based Risk
+
+Sariel prioritizes attack paths—not CVSS scores.
+
+---
+
+### Evidence-Aware AI
+
+Sariel AI explicitly tells you:
+
+- What it knows  
+- What it assumes  
+- What is missing  
+
+---
+
+### Hybrid Reasoning
+
+Graph logic (truth) + AI reasoning (inference) = realistic attack modeling
+
+---
+
+## Example Insight
+
+Instead of:
+
+GIS-GEO-ARC-01 has critical vulnerabilities  
+
+Sariel shows:
+
+Genetec-06  
+→ CH-TYLER-SQL-01  
+→ GIS-GEO-ARC-01  
+
+Confidence: Medium  
+Missing: credentials, network flow  
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/reolus/Sariel.git
+cd Sariel
+docker compose up
+```
+
+API:
+http://127.0.0.1:8000
+
+---
+
+## Running the API
+
+```bash
+uvicorn sariel.api.main:app --reload
+```
+
+---
+
+## Neo4j Configuration
+
+bolt://localhost:7687  
+
+Environment variables:
+
+NEO4J_URI  
+NEO4J_USERNAME  
+NEO4J_PASSWORD  
+
+---
+
+## Development Roadmap
+
+### Phase 1 (Current)
+- Graph-based attack path modeling  
+- Vulnerability + asset correlation  
+- Initial AI mapping  
+
+### Phase 2
+- Credential and identity modeling  
+- Network reachability  
+- Confidence scoring  
+
+### Phase 3
+- Real-time attack simulation  
+- Automated remediation prioritization  
+- Continuous monitoring  
+
+---
+
+## Vision
+
+Security teams should know the attacker’s path **before the attacker takes it.**
+
+---
+
+## Name
+
+Sariel — “Watcher of the watchers”
+
+---
+
+## Disclaimer
+
+Sariel provides analysis and modeling, not guarantees.  
+AI outputs are suggestions requiring validation.
+
+---
+
+## License
+
+TBD
+
+
+---
+
+## High-Level Architecture
+
+```mermaid
+flowchart LR
+    A[Data Sources] --> B[Ingestion Layer]
+    B --> C[Normalization Engine]
+    C --> D[Neo4j Graph]
+    D --> E[Context Builder]
+    E --> F[AI Attack Mapper]
+    F --> G[Validation Layer]
+    G --> H[Suggested Edges]
+    H --> I[Analyst Review]
+    I --> J[Confirmed Attack Paths]
+```
+
+---
+
+## Attack Path Flow
+
+```mermaid
+flowchart LR
+    A[Compromise Initial Host] --> B[Exploit or Access]
+    B --> C[Credential Discovery]
+    C --> D[Lateral Movement]
+    D --> E[Privilege Escalation]
+    E --> F[Target System]
+```
+
+---
+
+## Graph Model
+
+```mermaid
+graph TD
+    A[Asset] -->|HAS_VULN| V[Vulnerability]
+    A -->|EXPOSES_SERVICE| S[Service]
+    A -->|MEMBER_OF| I[Identity]
+    A -->|RUNS_SERVICE| S
+    A -->|SUGGESTS_LATERAL_MOVE| B[Asset]
+```
+
+---
+
+## AI Mapping Pipeline
+
+```mermaid
+flowchart LR
+    A[Neo4j Graph] --> B[Context Builder]
+    B --> C[LLM Reasoning]
+    C --> D[Structured JSON]
+    D --> E[Validator]
+    E --> F[SUGGESTS_* Edges]
+```
+
+---
+
+## Confidence Model
+
+```mermaid
+flowchart TD
+    A[AI Confidence] --> D[Final Score]
+    B[Graph Evidence] --> D
+    C[Exploitability Data] --> D
+    E[Environment Signals] --> D
+```
+
+---
+
+## Example Attack Path
+
+```mermaid
+flowchart LR
+    G[Genetec-06] --> S[SMB Exposure]
+    S --> T[CH-TYLER-SQL-01]
+    T --> L[Log4j Vulnerability]
+    L --> GIS[GIS-GEO-ARC-01]
+```
+
+---
+
+## Vision
+
+Security teams should know the attacker’s path **before the attacker takes it.**

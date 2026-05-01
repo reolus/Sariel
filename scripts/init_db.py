@@ -54,6 +54,27 @@ CREATE TABLE IF NOT EXISTS scan_history (
     completed_at    TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS traversal_paths (
+    path_id         TEXT PRIMARY KEY,
+    start_node_id   TEXT NOT NULL,
+    end_node_id     TEXT NOT NULL,
+    total_score     DOUBLE PRECISION NOT NULL,
+    severity        TEXT NOT NULL,
+    depth           INTEGER NOT NULL DEFAULT 0,
+    is_terminal     BOOLEAN NOT NULL DEFAULT FALSE,
+    terminal_reason TEXT NOT NULL DEFAULT '',
+    technique_chain JSONB NOT NULL DEFAULT '[]',
+    hops            JSONB NOT NULL DEFAULT '[]',
+    snapshot_id     TEXT,
+    discovered_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tpaths_score     ON traversal_paths (total_score DESC);
+CREATE INDEX IF NOT EXISTS idx_tpaths_severity  ON traversal_paths (severity);
+CREATE INDEX IF NOT EXISTS idx_tpaths_start     ON traversal_paths (start_node_id);
+CREATE INDEX IF NOT EXISTS idx_tpaths_terminal  ON traversal_paths (is_terminal);
+CREATE INDEX IF NOT EXISTS idx_tpaths_discovered ON traversal_paths (discovered_at DESC);
+
 CREATE TABLE IF NOT EXISTS suppressions (
     id              SERIAL PRIMARY KEY,
     path_id         TEXT,

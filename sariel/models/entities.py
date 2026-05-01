@@ -10,7 +10,6 @@ class Cloud(str, Enum):
     AWS = "aws"
     AZURE = "azure"
     ONPREM = "onprem"
-    ONPREM = "onprem"
 
 
 class NodeType(str, Enum):

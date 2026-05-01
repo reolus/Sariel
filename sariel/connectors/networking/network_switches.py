@@ -142,13 +142,30 @@ def collect_running_config(target: SwitchTarget) -> str:
             "pip install -e '.[network]'"
         ) from exc
 
+    password = target.password
+    if not password and target.password_env:
+        password = os.getenv(target.password_env)
+
+    if not password:
+        raise ValueError(
+            f"No password found for switch {target.name}. "
+            f"Set password or password_env in inventory."
+        )
+
     params = {
         "device_type": target.vendor,
         "host": target.host,
         "username": target.username,
-        "password": target.password or (os.getenv(target.password_env) if target.password_env else None),
+        "password": password,
         "port": target.port,
-        "timeout": target.timeout,
+        "use_keys": False,
+        "allow_agent": False,
+        "look_for_keys": False,
+        "timeout": 60,
+        "conn_timeout": 30,
+        "banner_timeout": 30,
+        "auth_timeout": 30,
+        "fast_cli": False,
     }
     if target.secret:
         params["secret"] = target.secret

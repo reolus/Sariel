@@ -146,7 +146,112 @@ class PathPrioritizer:
         with self.driver.session(database=self.database) as session:
             return [r["source"] for r in session.run(query, limit=limit)]
 
-    def prioritize_for_source(self, source: str, top: int = 25, max_hops: int = 4) -> list[PrioritizedPath]:
+    def prioritize_for_source(
+        self,
+        source: str,
+        top: int = 25,
+        max_hops: int = 4,
+    ) -> list[PrioritizedPath]:
+        """
+        Prioritize attack paths from a single source host.
+
+        Neo4j does not allow parameters inside variable-length relationship
+        bounds, so max_hops must be safely validated and inserted directly
+        into the Cypher string.
+        """
+        top = int(top)
+        max_hops = int(max_hops)
+
+        if top < 1:
+            top = 25
+
+        if max_hops < 1:
+            max_hops = 1
+
+        # Hard cap to prevent accidental graph detonation.
+        if max_hops > 8:
+            max_hops = 8
+
+        query = f"""
+        MATCH (src:SarielNode)-[:IN_SUBNET]->(s1:Subnet)
+        WHERE NOT src:Subnet
+        AND NOT src:Vulnerability
+        AND toLower(coalesce(src.hostname, src.label, src.name, src.host_key, ''))
+            CONTAINS toLower($source)
+
+        MATCH p =
+        (s1)-[reach:CAN_REACH*1..{max_hops}]->(s2:Subnet)
+        <-[:IN_SUBNET]-(target:SarielNode)
+
+        WHERE NOT target:Subnet
+        AND NOT target:Vulnerability
+        AND src <> target
+
+        MATCH (target)-[:HAS_VULN]->(v:Vulnerability)
+        WHERE v.severity IN ['CRITICAL', 'HIGH']
+
+        WITH DISTINCT src, s1, s2, target, v, p, reach
+
+        WITH
+        src,
+        s1,
+        s2,
+        target,
+        v,
+        p,
+        reduce(conf = 1.0, r IN reach | conf * coalesce(r.confidence, 0.5)) AS route_confidence,
+        [n IN nodes(p) WHERE n.cidr IS NOT NULL | n.cidr] AS path_cidrs
+
+        RETURN
+        id(src) AS source_neo4j_id,
+        coalesce(src.canonical_id, src.id, src.hostname_key, src.host_key, toString(id(src))) AS source_id,
+        coalesce(src.hostname, src.label, src.name, src.host_key) AS source_name,
+        coalesce(src.ip_key, src.private_ip, src.ip) AS source_ip,
+        s1.cidr AS source_subnet,
+
+        id(target) AS target_neo4j_id,
+        coalesce(target.canonical_id, target.id, target.hostname_key, target.host_key, toString(id(target))) AS target_id,
+        coalesce(target.hostname, target.label, target.name, target.host_key) AS target_name,
+        coalesce(target.ip_key, target.private_ip, target.ip) AS target_ip,
+        s2.cidr AS target_subnet,
+
+        id(v) AS vulnerability_neo4j_id,
+        coalesce(v.canonical_id, v.cve_id, v.nessus_plugin_id, v.name, v.label, toString(id(v))) AS vulnerability_id,
+        coalesce(v.name, v.label, v.cve_id, v.nessus_plugin_name) AS vulnerability_name,
+        v.severity AS severity,
+        coalesce(v.cvss_score, 0) AS cvss_score,
+        coalesce(v.epss_score, 0) AS epss_score,
+        coalesce(v.vpr_score, 0) AS vpr_score,
+        coalesce(v.has_exploit, false) AS has_exploit,
+        coalesce(v.service, '') AS service,
+        v.port AS port,
+
+        length(p) + 2 AS hops,
+        route_confidence AS route_confidence,
+        path_cidrs AS path_cidrs
+
+        LIMIT $query_limit
+        """
+
+        # Pull more than top so Python scoring can sort and trim properly.
+        query_limit = max(top * 20, 500)
+        query_limit = min(query_limit, 5000)
+
+        with self.driver.session(database=self.database) as session:
+            records = [
+                dict(r)
+                for r in session.run(
+                    query,
+                    source=source,
+                    query_limit=query_limit,
+                )
+            ]
+
+        paths = [self._record_to_path(r) for r in records]
+        paths.sort(key=lambda x: x.risk_score, reverse=True)
+        return paths[:top]
+
+    def prioritize_for_source_old(self, source: str, top: int = 25, max_hops: int = 4) -> list[PrioritizedPath]:
         query = """
         MATCH (src:SarielNode)-[:IN_SUBNET]->(s1:Subnet)
         WHERE NOT src:Subnet AND NOT src:Vulnerability

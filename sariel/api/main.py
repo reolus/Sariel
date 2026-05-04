@@ -11,6 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sariel.api.routers import risks, paths, assets, admin
 from sariel.models.config import get_settings
 
+from sariel.api.acknowledgements import router as acknowledgements_router
+
+app.include_router(acknowledgements_router)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s — %(message)s",

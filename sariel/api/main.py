@@ -9,11 +9,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from sariel.api.routers import risks, paths, assets, admin
-from sariel.models.config import get_settings
-
 from sariel.api.acknowledgements import router as acknowledgements_router
-
-app.include_router(acknowledgements_router)
+from sariel.models.config import get_settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,7 +37,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -48,6 +45,7 @@ app.include_router(risks.router)
 app.include_router(paths.router)
 app.include_router(assets.router)
 app.include_router(admin.router)
+app.include_router(acknowledgements_router)
 
 
 @app.get("/")
